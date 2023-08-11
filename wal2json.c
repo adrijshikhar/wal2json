@@ -34,6 +34,9 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+
 #define	WAL2JSON_FORMAT_VERSION			2
 #define	WAL2JSON_FORMAT_MIN_VERSION		1
 
@@ -149,9 +152,13 @@ static bool pg_filter_by_action(int change_type, JsonAction actions);
 static bool pg_filter_by_table(List *filter_tables, char *schemaname, char *tablename);
 static bool pg_add_by_table(List *add_tables, char *schemaname, char *tablename);
 
+static void flush_to_file(LogicalDecodingContext *ctx);
+
+static void upload_to_s3();
+
 /* version 1 */
 static void pg_decode_begin_txn_v1(LogicalDecodingContext *ctx,
-					ReorderBufferTXN *txn);
+									   ReorderBufferTXN *txn);
 static void pg_decode_commit_txn_v1(LogicalDecodingContext *ctx,
 					 ReorderBufferTXN *txn, XLogRecPtr commit_lsn);
 static void pg_decode_change_v1(LogicalDecodingContext *ctx,
@@ -808,6 +815,8 @@ pg_decode_begin_txn(LogicalDecodingContext *ctx, ReorderBufferTXN *txn)
 		pg_decode_begin_txn_v1(ctx, txn);
 	else
 		elog(ERROR, "format version %d is not supported", data->format_version);
+
+	// flush_to_file(ctx);
 }
 
 static void
@@ -917,6 +926,8 @@ pg_decode_commit_txn(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 		pg_decode_commit_txn_v1(ctx, txn, commit_lsn);
 	else
 		elog(ERROR, "format version %d is not supported", data->format_version);
+
+	flush_to_file(ctx);
 }
 
 static void
@@ -1634,6 +1645,8 @@ pg_decode_change(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 		pg_decode_change_v1(ctx, txn, relation, change);
 	else
 		elog(ERROR, "format version %d is not supported", data->format_version);
+
+	// flush_to_file(ctx);
 }
 
 static void
@@ -3113,4 +3126,109 @@ split_string_to_oid_list(char *rawstring, char separator, List **sl)
 	} while (!done);
 
 	return true;
+}
+
+static void flush_to_file(LogicalDecodingContext *ctx)
+{
+	// Create a sample StringInfo
+	StringInfo strInfo = ctx -> out;
+
+	// Open a file for writing
+	FILE *file = fopen("/opt/homebrew/var/postgresql@14/wal_flush.txt", "a+");
+	if (file == NULL)
+	{
+		elog(ERROR, "Error opening file");
+		return;
+	}
+
+	// // Write the StringInfo's data to the file
+	// if (fwrite(strInfo->data, sizeof(char), strInfo->len, file) != strInfo->len)
+	// {
+	// 	elog(ERROR, "Error writing to file");
+	// 	return;
+	// }
+	// Append the StringInfo's data to the file
+	if (fprintf(file, "%s\n", strInfo->data) < 0)
+	{
+		elog(ERROR, "Error appending to file");
+	}
+
+	// Close the file
+	fclose(file);
+	upload_to_s3();
+}
+
+#include <stdio.h>
+#include <string.h>
+#include </opt/homebrew/lib/curl/include/curl/curl.h>
+
+// Define your AWS credentials
+const char *aws_access_key = "AKIAVNLVXJ2X25RYDKGH";
+const char *aws_secret_key = "1OB9WslixOg/X06eTULyN8Lf4FRM7Zfkr9kv/q6i";
+
+// Define the S3 bucket and object key
+const char *bucket_name = "large-so-test";
+const char *object_key = "wal_flush.txt";
+
+// Specify the local file path to upload
+const char *local_file_path = "/opt/homebrew/var/postgresql@14/wal_flush.txt";
+
+// AWS S3 endpoint
+const char *s3_endpoint = "s3.amazonaws.com";
+
+static void upload_to_s3()
+{
+	CURL *curl;
+	CURLcode res;
+
+	// Initialize libcurl
+	curl_global_init(CURL_GLOBAL_ALL);
+	curl = curl_easy_init();
+
+	if (curl)
+	{
+		// Open the local file
+		FILE *file = fopen(local_file_path, "rb");
+		if (!file)
+		{
+			elog(ERROR, "Error opening local file\n");
+			curl_easy_cleanup(curl);
+			return;
+		}
+
+		// Get the file size
+		fseek(file, 0, SEEK_END);
+		long file_size = ftell(file);
+		fseek(file, 0, SEEK_SET);
+
+		// Construct the S3 URL
+		char s3_url[256];
+		snprintf(s3_url, sizeof(s3_url), "https://%s/%s/%s", s3_endpoint, bucket_name, object_key);
+
+		// Set up the CURL request
+		curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
+		curl_easy_setopt(curl, CURLOPT_URL, s3_url);
+		curl_easy_setopt(curl, CURLOPT_READDATA, file);
+		curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, (curl_off_t)file_size);
+
+		// Set the required headers for AWS S3
+		struct curl_slist *headers = NULL;
+		char authorization_header[256];
+		snprintf(authorization_header, sizeof(authorization_header), "Authorization: AWS %s:%s", aws_access_key, aws_secret_key);
+		headers = curl_slist_append(headers, "Expect:");
+		headers = curl_slist_append(headers, authorization_header);
+		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+		// Perform the upload
+		res = curl_easy_perform(curl);
+
+		elog(DEBUG1, "Response code: %d\n", res);
+		// Clean up
+		curl_slist_free_all(headers);
+		fclose(file);
+		curl_easy_cleanup(curl);
+	}
+
+	// Clean up libcurl
+	curl_global_cleanup();
 }
