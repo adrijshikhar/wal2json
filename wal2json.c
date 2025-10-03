@@ -1162,7 +1162,7 @@ tuple_to_stringinfo(LogicalDecodingContext *ctx, TupleDesc tupdesc, HeapTuple tu
 		getTypeOutputInfo(typid, &typoutput, &typisvarlena);
 
 		/* XXX Unchanged TOAST Datum does not need to be output */
-		if (!isnull && typisvarlena && VARATT_IS_EXTERNAL_ONDISK(origval))
+		if (!isnull && typisvarlena && VARATT_IS_EXTERNAL_ONDISK(DatumGetPointer(origval)))
 		{
 			elog(DEBUG1, "column \"%s\" has an unchanged TOAST", NameStr(attr->attname));
 			continue;
@@ -2012,7 +2012,7 @@ pg_decode_write_value(LogicalDecodingContext *ctx, Datum value, bool isnull, Oid
 	getTypeOutputInfo(typid, &typoutfunc, &isvarlena);
 
 	/* XXX dead code? check is one level above. */
-	if (isvarlena && VARATT_IS_EXTERNAL_ONDISK(value))
+	if (isvarlena && VARATT_IS_EXTERNAL_ONDISK(DatumGetPointer(value)))
 	{
 		elog(DEBUG1, "unchanged TOAST Datum");
 		return;
@@ -2154,7 +2154,7 @@ pg_decode_write_tuple(LogicalDecodingContext *ctx, Relation relation, HeapTuple 
 			continue;
 
 		/* don't send unchanged TOAST Datum */
-		if (!nulls[i] && attr->attlen == -1 && VARATT_IS_EXTERNAL_ONDISK(values[i]))
+		if (!nulls[i] && attr->attlen == -1 && VARATT_IS_EXTERNAL_ONDISK(DatumGetPointer(values[i])))
 			continue;
 
 		if (need_sep)
