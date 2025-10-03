@@ -850,7 +850,10 @@ pg_decode_begin_txn_v1(LogicalDecodingContext *ctx, ReorderBufferTXN *txn)
 		pfree(lsn_str);
 	}
 
-#if PG_VERSION_NUM >= 150000
+#if PG_VERSION_NUM >= 190000
+	if (data->include_timestamp)
+		appendStringInfo(ctx->out, "%s\"timestamp\":%s\"%s\",%s", data->ht, data->sp, timestamptz_to_str(txn->commit_time), data->nl);
+#elif PG_VERSION_NUM >= 150000
 	if (data->include_timestamp)
 		appendStringInfo(ctx->out, "%s\"timestamp\":%s\"%s\",%s", data->ht, data->sp, timestamptz_to_str(txn->xact_time.commit_time), data->nl);
 #else
@@ -883,7 +886,10 @@ pg_decode_begin_txn_v2(LogicalDecodingContext *ctx, ReorderBufferTXN *txn)
 	if (data->include_xids)
 		appendStringInfo(ctx->out, ",\"xid\":%u", txn->xid);
 
-#if PG_VERSION_NUM >= 150000
+#if PG_VERSION_NUM >= 190000
+	if (data->include_timestamp)
+			appendStringInfo(ctx->out, ",\"timestamp\":\"%s\"", timestamptz_to_str(txn->commit_time));
+#elif PG_VERSION_NUM >= 150000
 	if (data->include_timestamp)
 			appendStringInfo(ctx->out, ",\"timestamp\":\"%s\"", timestamptz_to_str(txn->xact_time.commit_time));
 #else
@@ -999,7 +1005,10 @@ pg_decode_commit_txn_v2(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 	if (data->include_xids)
 		appendStringInfo(ctx->out, ",\"xid\":%u", txn->xid);
 
-#if PG_VERSION_NUM >= 150000
+#if PG_VERSION_NUM >= 190000
+	if (data->include_timestamp)
+			appendStringInfo(ctx->out, ",\"timestamp\":\"%s\"", timestamptz_to_str(txn->commit_time));
+#elif PG_VERSION_NUM >= 150000
 	if (data->include_timestamp)
 			appendStringInfo(ctx->out, ",\"timestamp\":\"%s\"", timestamptz_to_str(txn->xact_time.commit_time));
 #else
@@ -2383,7 +2392,10 @@ pg_decode_write_change(LogicalDecodingContext *ctx, ReorderBufferTXN *txn, Relat
 	if (data->include_xids)
 		appendStringInfo(ctx->out, ",\"xid\":%u", txn->xid);
 
-#if PG_VERSION_NUM >= 150000
+#if PG_VERSION_NUM >= 190000
+	if (data->include_timestamp)
+		appendStringInfo(ctx->out, ",\"timestamp\":\"%s\"", timestamptz_to_str(txn->commit_time));
+#elif PG_VERSION_NUM >= 150000
 	if (data->include_timestamp)
 		appendStringInfo(ctx->out, ",\"timestamp\":\"%s\"", timestamptz_to_str(txn->xact_time.commit_time));
 #else
@@ -2738,7 +2750,10 @@ pg_decode_message_v2(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 
 	if (data->include_timestamp)
 	{
-#if PG_VERSION_NUM >= 150000
+#if PG_VERSION_NUM >= 190000
+		if (transactional)
+			appendStringInfo(ctx->out, ",\"timestamp\":\"%s\"", timestamptz_to_str(txn->commit_time));
+#elif PG_VERSION_NUM >= 150000
 		if (transactional)
 			appendStringInfo(ctx->out, ",\"timestamp\":\"%s\"", timestamptz_to_str(txn->xact_time.commit_time));
 #else
@@ -2877,7 +2892,10 @@ static void pg_decode_truncate_v1(LogicalDecodingContext *ctx,
 	if (data->include_xids)
 		appendStringInfo(ctx->out, "%s%s%s\"xid\":%s%u,%s", data->ht, data->ht, data->ht, data->sp, txn->xid, data->nl);
 
-#if PG_VERSION_NUM >= 150000
+#if PG_VERSION_NUM >= 190000
+	if (data->include_timestamp)
+		appendStringInfo(ctx->out, "%s%s%s\"timestamp\":%s\"%s\",%s", data->ht, data->ht, data->ht, data->sp, timestamptz_to_str(txn->commit_time), data->nl);
+#elif PG_VERSION_NUM >= 150000
 	if (data->include_timestamp)
 		appendStringInfo(ctx->out, "%s%s%s\"timestamp\":%s\"%s\",%s", data->ht, data->ht, data->ht, data->sp, timestamptz_to_str(txn->xact_time.commit_time), data->nl);
 #else
@@ -2967,7 +2985,10 @@ static void pg_decode_truncate_v2(LogicalDecodingContext *ctx,
 		if (data->include_xids)
 			appendStringInfo(ctx->out, ",\"xid\":%u", txn->xid);
 
-#if PG_VERSION_NUM >= 150000
+#if PG_VERSION_NUM >= 190000
+		if (data->include_timestamp)
+			appendStringInfo(ctx->out, ",\"timestamp\":\"%s\"", timestamptz_to_str(txn->commit_time));
+#elif PG_VERSION_NUM >= 150000
 		if (data->include_timestamp)
 			appendStringInfo(ctx->out, ",\"timestamp\":\"%s\"", timestamptz_to_str(txn->xact_time.commit_time));
 #else
