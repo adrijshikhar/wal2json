@@ -131,7 +131,9 @@ static void pg_decode_commit_txn(LogicalDecodingContext *ctx,
 static void pg_decode_change(LogicalDecodingContext *ctx,
 				 ReorderBufferTXN *txn, Relation rel,
 				 ReorderBufferChange *change);
-#if PG_VERSION_NUM >= 90500
+#if PG_VERSION_NUM >= 190000
+static bool pg_filter_by_origin(LogicalDecodingContext *ctx, ReplOriginId origin_id);
+#elif PG_VERSION_NUM >= 90500
 static bool pg_filter_by_origin(LogicalDecodingContext *ctx, RepOriginId origin_id);
 #endif
 #if PG_VERSION_NUM >= 90600
@@ -787,15 +789,24 @@ pg_decode_shutdown(LogicalDecodingContext *ctx)
 
 #if PG_VERSION_NUM >= 90500
 static bool
+#if PG_VERSION_NUM >= 190000
+pg_filter_by_origin(LogicalDecodingContext *ctx, ReplOriginId origin_id)
+#else
 pg_filter_by_origin(LogicalDecodingContext *ctx, RepOriginId origin_id)
+#endif
 {
 	JsonDecodingData *data = ctx->output_plugin_private;
 
 	elog(DEBUG3, "origin: %u", origin_id);
 
 	/* changes produced locally are never filtered */
+#if PG_VERSION_NUM >= 190000
+	if (origin_id == InvalidReplOriginId)
+		return false;
+#else
 	if (origin_id == InvalidRepOriginId)
 		return false;
+#endif
 
 	/* Filter origins, if available */
 	if (list_length(data->filter_origins) > 0 && list_member_oid(data->filter_origins, origin_id))
