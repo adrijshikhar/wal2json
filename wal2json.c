@@ -232,7 +232,9 @@ _PG_init(void)
 void
 _PG_output_plugin_init(OutputPluginCallbacks *cb)
 {
+#if PG_VERSION_NUM < 160000
 	AssertVariableIsOfType(&_PG_output_plugin_init, LogicalOutputPluginInit);
+#endif
 
 	cb->startup_cb = pg_decode_startup;
 	cb->begin_cb = pg_decode_begin_txn;
@@ -1731,7 +1733,9 @@ pg_decode_change_v1(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 	char		*schemaname;
 	char		*tablename;
 
+#if PG_VERSION_NUM < 160000
 	AssertVariableIsOfType(&pg_decode_change, LogicalDecodeChangeCB);
+#endif
 
 	data = ctx->output_plugin_private;
 
